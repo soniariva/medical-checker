@@ -9,7 +9,7 @@ st.set_page_config(page_title="15分鐘保險檢視", page_icon="🩺", layout="
 st.title("🩺 15分鐘保險檢視")
 st.caption("輸入你嘅數字，系統會自動計算保障缺口")
 
-# ==================== 側邊欄：對比價目表 ====================
+# ==================== 側邊欄：對比價目表（添加千位分隔符） ====================
 with st.sidebar:
     st.header("💰 費用 vs 賠償 對比價目表")
     st.caption("以下係常見項目嘅參考費用")
@@ -28,7 +28,10 @@ with st.sidebar:
             "基本保單賠償 (HK$)": [0, 750, 1200, 25000, 50000, 0, 2000],
         }
         df_compare = pd.DataFrame(compare_data)
-        df_compare["你要自付 (HK$)"] = df_compare["實際費用 (HK$)"] - df_compare["基本保單賠償 (HK$)"]
+        df_compare["實際費用 (HK$)"] = df_compare["實際費用 (HK$)"].apply(lambda x: f"{x:,}")
+        df_compare["基本保單賠償 (HK$)"] = df_compare["基本保單賠償 (HK$)"].apply(lambda x: f"{x:,}")
+        df_compare["你要自付 (HK$)"] = (pd.to_numeric(df_compare["實際費用 (HK$)"].str.replace(",", "")) - 
+                                         pd.to_numeric(df_compare["基本保單賠償 (HK$)"].str.replace(",", ""))).apply(lambda x: f"{x:,}")
         st.dataframe(df_compare, use_container_width=True)
         st.info("💡 醫療：住院、手術、癌症治療費用")
         
@@ -39,7 +42,10 @@ with st.sidebar:
             "危疾賠償 (HK$)": [1000000, 1000000, 800000, 1000000, 1000000],
         }
         df_compare = pd.DataFrame(compare_data)
-        df_compare["賠償後剩餘"] = df_compare["危疾賠償 (HK$)"] - df_compare["平均治療費用 (HK$)"]
+        df_compare["平均治療費用 (HK$)"] = df_compare["平均治療費用 (HK$)"].apply(lambda x: f"{x:,}")
+        df_compare["危疾賠償 (HK$)"] = df_compare["危疾賠償 (HK$)"].apply(lambda x: f"{x:,}")
+        df_compare["賠償後剩餘"] = (pd.to_numeric(df_compare["危疾賠償 (HK$)"].str.replace(",", "")) - 
+                                      pd.to_numeric(df_compare["平均治療費用 (HK$)"].str.replace(",", ""))).apply(lambda x: f"{x:,}")
         st.dataframe(df_compare, use_container_width=True)
         st.info("💡 危疾：確診即賠一筆過，用於治療及生活開支")
         
@@ -50,8 +56,10 @@ with st.sidebar:
             "意外保險賠償 (HK$)": [50000, 100000, 50000, 1000000, 1000000],
         }
         df_compare = pd.DataFrame(compare_data)
-        df_compare["你要自付 (HK$)"] = df_compare["平均費用 (HK$)"] - df_compare["意外保險賠償 (HK$)"]
-        df_compare.loc[df_compare["你要自付 (HK$)"] < 0, "你要自付 (HK$)"] = 0
+        df_compare["平均費用 (HK$)"] = df_compare["平均費用 (HK$)"].apply(lambda x: f"{x:,}" if x > 0 else "0")
+        df_compare["意外保險賠償 (HK$)"] = df_compare["意外保險賠償 (HK$)"].apply(lambda x: f"{x:,}")
+        df_compare["你要自付 (HK$)"] = (pd.to_numeric(df_compare["平均費用 (HK$)"].str.replace(",", "")) - 
+                                         pd.to_numeric(df_compare["意外保險賠償 (HK$)"].str.replace(",", ""))).apply(lambda x: f"{max(0, x):,}")
         st.dataframe(df_compare, use_container_width=True)
         st.info("💡 意外：因意外受傷引致嘅醫療費用及賠償")
 
@@ -84,60 +92,74 @@ if st.session_state.step == 1:
         else:
             st.warning("請輸入客人姓名")
 
-# ==================== 第二步：輸入現有保障額 ====================
+# ==================== 第二步：輸入現有保單銀碼（與市場費用並列） ====================
 elif st.session_state.step == 2:
     st.header("📝 第二步：輸入你現有保單嘅保障額")
-    st.info("請填寫你現有保險計劃嘅賠償金額，如果冇該項保障，請留空或輸入 0")
+    st.info("下表左邊係市場參考費用，右邊請輸入你份保單嘅賠償金額（如無該項保障，請填 0）")
     
-    # ----- 醫療保障 -----
+    # 市場參考費用
+    market = {
+        "住院 (大房/晚)": 1200,
+        "大型手術 (每次)": 40000,
+        "癌症治療 (每年)": 720000,
+        "危疾一筆過賠償": 800000,
+        "意外醫療 (每年)": 50000,
+        "意外身故/傷殘": 1000000
+    }
+    
+    # 建立輸入表格
     st.subheader("🏥 醫療保障")
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns([2, 1, 2])
     with col1:
-        risk = st.selectbox(
-            "最擔心嘅健康風險",
-            ["癌症", "心臟病", "中風", "意外受傷", "其他"]
-        )
+        st.markdown("**保障項目**")
+        st.text("住院 (大房/晚)")
+        st.text("大型手術 (每次)")
+        st.text("癌症治療 (每年)")
     with col2:
-        budget = st.number_input("你認為住院一晚需要幾多預算？", min_value=0, step=500, value=1000)
+        st.markdown("**市場參考費用**")
+        st.text(f"HK$ {market['住院 (大房/晚)']:,}")
+        st.text(f"HK$ {market['大型手術 (每次)']:,}")
+        st.text(f"HK$ {market['癌症治療 (每年)']:,}")
+    with col3:
+        st.markdown("**你現有賠償 (HK$)**")
+        inpatient = st.number_input("住院賠償", min_value=0, step=500, value=0, label_visibility="collapsed", key="inpatient")
+        surgery = st.number_input("手術賠償", min_value=0, step=10000, value=0, label_visibility="collapsed", key="surgery")
+        cancer = st.number_input("癌症治療賠償", min_value=0, step=50000, value=0, label_visibility="collapsed", key="cancer")
     
+    st.divider()
+    st.subheader("❤️ 危疾保障")
+    col1, col2, col3 = st.columns([2, 1, 2])
+    with col1:
+        st.markdown("**保障項目**")
+        st.text("危疾一筆過賠償")
+    with col2:
+        st.markdown("**市場參考費用**")
+        st.text(f"HK$ {market['危疾一筆過賠償']:,}")
+    with col3:
+        critical = st.number_input("危疾賠償", min_value=0, step=100000, value=0, label_visibility="collapsed", key="critical")
+    
+    st.divider()
+    st.subheader("⚠️ 意外保障")
+    col1, col2, col3 = st.columns([2, 1, 2])
+    with col1:
+        st.markdown("**保障項目**")
+        st.text("意外醫療 (每年)")
+        st.text("意外身故/傷殘")
+    with col2:
+        st.markdown("**市場參考費用**")
+        st.text(f"HK$ {market['意外醫療 (每年)']:,}")
+        st.text(f"HK$ {market['意外身故/傷殘']:,}")
+    with col3:
+        accident_med = st.number_input("意外醫療賠償", min_value=0, step=10000, value=0, label_visibility="collapsed", key="accident_med")
+        accident_death = st.number_input("意外身故賠償", min_value=0, step=100000, value=0, label_visibility="collapsed", key="accident_death")
+    
+    # 其他資料
+    risk = st.selectbox("最擔心嘅健康風險", ["癌症", "心臟病", "中風", "意外受傷", "其他"])
+    budget = st.number_input("你認為住院一晚需要幾多預算？", min_value=0, step=500, value=1000)
     has_medical = st.radio("有冇買醫療保險？", ["有", "冇"], horizontal=True)
-    
     company = ""
-    inpatient_amount = 0
-    surgery_amount = 0
-    cancer_amount = 0
     if has_medical == "有":
         company = st.text_input("保險公司名稱")
-        col_a, col_b = st.columns(2)
-        with col_a:
-            inpatient_amount = st.number_input("住院賠償額 (每晚)", min_value=0, step=500, value=0)
-            surgery_amount = st.number_input("手術賠償額 (每次)", min_value=0, step=10000, value=0)
-        with col_b:
-            cancer_amount = st.number_input("癌症治療賠償額 (每年)", min_value=0, step=50000, value=0,
-                                            help="例如標靶藥、化療、電療等每年最高賠償")
-    
-    st.divider()
-    
-    # ----- 危疾保障 -----
-    st.subheader("❤️ 危疾保障")
-    has_critical = st.radio("有冇買危疾保險？", ["有", "冇"], horizontal=True)
-    critical_amount = 0
-    if has_critical == "有":
-        critical_amount = st.number_input("危疾一筆過賠償額", min_value=0, step=100000, value=0, format="%d")
-    
-    st.divider()
-    
-    # ----- 意外保障 -----
-    st.subheader("⚠️ 意外保障")
-    has_accident = st.radio("有冇買意外保險？", ["有", "冇"], horizontal=True)
-    accident_medical = 0
-    accident_death = 0
-    if has_accident == "有":
-        col1, col2 = st.columns(2)
-        with col1:
-            accident_medical = st.number_input("意外醫療賠償 (每年)", min_value=0, step=10000, value=0)
-        with col2:
-            accident_death = st.number_input("意外身故/永久傷殘賠償", min_value=0, step=100000, value=0)
     
     col1, col2 = st.columns(2)
     with col1:
@@ -146,17 +168,16 @@ elif st.session_state.step == 2:
             st.rerun()
     with col2:
         if st.button("下一步 →"):
+            # 儲存所有數據
             st.session_state.client_data["risk"] = risk
             st.session_state.client_data["budget"] = budget
             st.session_state.client_data["has_medical"] = has_medical
             st.session_state.client_data["company"] = company
-            st.session_state.client_data["inpatient_amount"] = inpatient_amount
-            st.session_state.client_data["surgery_amount"] = surgery_amount
-            st.session_state.client_data["cancer_amount"] = cancer_amount
-            st.session_state.client_data["has_critical"] = has_critical
-            st.session_state.client_data["critical_amount"] = critical_amount
-            st.session_state.client_data["has_accident"] = has_accident
-            st.session_state.client_data["accident_medical"] = accident_medical
+            st.session_state.client_data["inpatient_amount"] = inpatient
+            st.session_state.client_data["surgery_amount"] = surgery
+            st.session_state.client_data["cancer_amount"] = cancer
+            st.session_state.client_data["critical_amount"] = critical
+            st.session_state.client_data["accident_medical"] = accident_med
             st.session_state.client_data["accident_death"] = accident_death
             st.session_state.step = 3
             st.rerun()
@@ -164,136 +185,79 @@ elif st.session_state.step == 2:
 # ==================== 第三步：分析缺口 ====================
 elif st.session_state.step == 3:
     st.header("📊 第三步：保障缺口分析")
-    
     data = st.session_state.client_data
     
-    # 市場參考費用（取自側邊欄）
-    market_inpatient = 1200      # 大房每晚
-    market_surgery = 40000       # 大型手術
-    market_cancer_yearly = 720000  # 標靶藥每月6萬 x12
-    market_critical = 800000     # 癌症平均治療費（危疾可對比）
-    market_accident_medical = 50000   # 意外醫療每年參考
-    market_accident_death = 1000000   # 意外身故參考
+    # 市場參考費用（與第二步一致）
+    market_inpatient = 1200
+    market_surgery = 40000
+    market_cancer = 720000
+    market_critical = 800000
+    market_acc_med = 50000
+    market_acc_death = 1000000
     
-    # 計算差額（正數表示不足）
-    inpatient_gap = max(0, market_inpatient - data["inpatient_amount"]) if data["has_medical"] == "有" else market_inpatient
-    surgery_gap = max(0, market_surgery - data["surgery_amount"]) if data["has_medical"] == "有" else market_surgery
-    cancer_gap = max(0, market_cancer_yearly - data["cancer_amount"]) if data["has_medical"] == "有" else market_cancer_yearly
-    critical_gap = max(0, market_critical - data["critical_amount"]) if data["has_critical"] == "有" else market_critical
-    accident_medical_gap = max(0, market_accident_medical - data["accident_medical"]) if data["has_accident"] == "有" else market_accident_medical
-    accident_death_gap = max(0, market_accident_death - data["accident_death"]) if data["has_accident"] == "有" else market_accident_death
+    # 計算差額
+    inpatient_gap = max(0, market_inpatient - data["inpatient_amount"])
+    surgery_gap = max(0, market_surgery - data["surgery_amount"])
+    cancer_gap = max(0, market_cancer - data["cancer_amount"])
+    critical_gap = max(0, market_critical - data["critical_amount"])
+    acc_med_gap = max(0, market_acc_med - data["accident_medical"])
+    acc_death_gap = max(0, market_acc_death - data["accident_death"])
     
-    # 顯示分頁
-    tab1, tab2, tab3 = st.tabs(["🏥 醫療", "❤️ 危疾", "⚠️ 意外"])
+    # 顯示對比表格
+    st.markdown("### 市場費用 vs 你現有保障")
+    compare_df = pd.DataFrame({
+        "保障項目": ["住院 (每晚)", "大型手術 (每次)", "癌症治療 (每年)", "危疾 (一筆過)", "意外醫療 (每年)", "意外身故/傷殘"],
+        "市場參考費用": [f"${market_inpatient:,}", f"${market_surgery:,}", f"${market_cancer:,}", f"${market_critical:,}", f"${market_acc_med:,}", f"${market_acc_death:,}"],
+        "你現有賠償": [f"${data['inpatient_amount']:,}", f"${data['surgery_amount']:,}", f"${data['cancer_amount']:,}", 
+                       f"${data['critical_amount']:,}", f"${data['accident_medical']:,}", f"${data['accident_death']:,}"],
+        "差額 (不足)": [f"${inpatient_gap:,}", f"${surgery_gap:,}", f"${cancer_gap:,}", 
+                        f"${critical_gap:,}", f"${acc_med_gap:,}", f"${acc_death_gap:,}"]
+    })
+    st.dataframe(compare_df, use_container_width=True)
     
-    with tab1:
-        st.markdown("**市場參考費用**")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("住院 (大房/晚)", f"HK$ {market_inpatient:,}")
-            st.metric("大型手術 (每次)", f"HK$ {market_surgery:,}")
-        with col2:
-            st.metric("癌症治療 (每年)", f"HK$ {market_cancer_yearly:,}")
-        
-        st.markdown("**你現有保障**")
-        if data["has_medical"] == "有":
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("住院賠償", f"HK$ {data['inpatient_amount']:,}",
-                         delta=f"差額 HK$ {inpatient_gap:,}" if inpatient_gap > 0 else "足夠",
-                         delta_color="inverse" if inpatient_gap > 0 else "off")
-                st.metric("手術賠償", f"HK$ {data['surgery_amount']:,}",
-                         delta=f"差額 HK$ {surgery_gap:,}" if surgery_gap > 0 else "足夠",
-                         delta_color="inverse" if surgery_gap > 0 else "off")
-            with col2:
-                st.metric("癌症治療賠償", f"HK$ {data['cancer_amount']:,}",
-                         delta=f"差額 HK$ {cancer_gap:,}" if cancer_gap > 0 else "足夠",
-                         delta_color="inverse" if cancer_gap > 0 else "off")
-        else:
-            st.warning("未有醫療保險，以上全數為缺口")
-    
-    with tab2:
-        st.metric("市場參考 (癌症平均治療費)", f"HK$ {market_critical:,}")
-        if data["has_critical"] == "有":
-            st.metric("你現有危疾賠償", f"HK$ {data['critical_amount']:,}",
-                     delta=f"差額 HK$ {critical_gap:,}" if critical_gap > 0 else "足夠",
-                     delta_color="inverse" if critical_gap > 0 else "off")
-        else:
-            st.warning("未有危疾保險，缺口為 HK$ {:,}".format(market_critical))
-    
-    with tab3:
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("意外醫療 (每年)", f"HK$ {market_accident_medical:,}")
-            if data["has_accident"] == "有":
-                st.metric("你現有意外醫療", f"HK$ {data['accident_medical']:,}",
-                         delta=f"差額 HK$ {accident_medical_gap:,}" if accident_medical_gap > 0 else "足夠",
-                         delta_color="inverse" if accident_medical_gap > 0 else "off")
-            else:
-                st.warning("未有意外醫療保障")
-        with col2:
-            st.metric("意外身故/傷殘", f"HK$ {market_accident_death:,}")
-            if data["has_accident"] == "有":
-                st.metric("你現有意外身故賠償", f"HK$ {data['accident_death']:,}",
-                         delta=f"差額 HK$ {accident_death_gap:,}" if accident_death_gap > 0 else "足夠",
-                         delta_color="inverse" if accident_death_gap > 0 else "off")
-            else:
-                st.warning("未有意外身故保障")
-    
-    # 總結缺口
+    # 主要缺口
     st.divider()
     st.subheader("🔍 主要缺口")
     gaps = []
-    if data["has_medical"] == "冇":
-        gaps.append("完全沒有醫療保險，住院、手術、癌症治療全無保障")
-    else:
-        if inpatient_gap > 0:
-            gaps.append(f"醫療 - 住院保障不足，每晚差額 HK$ {inpatient_gap:,}")
-        if surgery_gap > 0:
-            gaps.append(f"醫療 - 手術保障不足，每次差額 HK$ {surgery_gap:,}")
-        if cancer_gap > 0:
-            gaps.append(f"醫療 - 癌症治療保障不足，每年差額 HK$ {cancer_gap:,}")
-    if data["has_critical"] == "冇":
-        gaps.append("完全沒有危疾保險，確診重大疾病時缺乏一筆過資金")
-    elif critical_gap > 0:
-        gaps.append(f"危疾 - 保障不足，差額 HK$ {critical_gap:,}")
-    if data["has_accident"] == "冇":
-        gaps.append("完全沒有意外保險")
-    else:
-        if accident_medical_gap > 0:
-            gaps.append(f"意外 - 醫療保障不足，每年差額 HK$ {accident_medical_gap:,}")
-        if accident_death_gap > 0:
-            gaps.append(f"意外 - 身故/傷殘賠償不足，差額 HK$ {accident_death_gap:,}")
+    if inpatient_gap > 0:
+        gaps.append(f"住院保障不足，每晚差額 ${inpatient_gap:,}")
+    if surgery_gap > 0:
+        gaps.append(f"手術保障不足，每次差額 ${surgery_gap:,}")
+    if cancer_gap > 0:
+        gaps.append(f"癌症治療保障不足，每年差額 ${cancer_gap:,}")
+    if critical_gap > 0:
+        gaps.append(f"危疾保障不足，一筆過差額 ${critical_gap:,}")
+    if acc_med_gap > 0:
+        gaps.append(f"意外醫療保障不足，每年差額 ${acc_med_gap:,}")
+    if acc_death_gap > 0:
+        gaps.append(f"意外身故保障不足，差額 ${acc_death_gap:,}")
     
     if gaps:
-        for gap in gaps:
-            st.error(f"⚠️ {gap}")
+        for g in gaps:
+            st.error(f"⚠️ {g}")
     else:
-        st.success("✅ 各項保障均達到市場參考水平，無明顯缺口")
+        st.success("✅ 所有保障均達到市場參考水平，無明顯缺口")
     
     # 建議行動
     st.subheader("💡 建議行動")
     recommendations = []
-    if data["has_medical"] == "冇":
-        recommendations.append("立即考慮自願醫保靈活計劃，涵蓋住院、手術及癌症治療")
+    if data["inpatient_amount"] == 0 and data["surgery_amount"] == 0 and data["cancer_amount"] == 0:
+        recommendations.append("完全沒有醫療保險，建議立即配置自願醫保靈活計劃")
     else:
         if inpatient_gap > 0 or surgery_gap > 0 or cancer_gap > 0:
             recommendations.append("升級醫療保險，提高住院、手術及癌症治療賠償額")
-    if data["has_critical"] == "冇":
-        recommendations.append("添置危疾保險，建議保額 HK$ 1,000,000 或以上")
+    if data["critical_amount"] == 0:
+        recommendations.append("完全沒有危疾保險，建議添置，保額最少 $1,000,000")
     elif critical_gap > 0:
-        recommendations.append("增加危疾保額至 HK$ 1,000,000 以上")
-    if data["has_accident"] == "冇":
-        recommendations.append("添置意外保險，保障意外醫療及身故")
+        recommendations.append("增加危疾保額至 $1,000,000 或以上")
+    if data["accident_medical"] == 0 and data["accident_death"] == 0:
+        recommendations.append("完全沒有意外保險，建議添置")
     else:
-        if accident_medical_gap > 0 or accident_death_gap > 0:
-            recommendations.append("加強意外保險，提高醫療及身故賠償額")
+        if acc_med_gap > 0 or acc_death_gap > 0:
+            recommendations.append("加強意外保險，提高醫療及身故賠償")
     
-    if recommendations:
-        for rec in recommendations:
-            st.info(f"📌 {rec}")
-    else:
-        st.success("保持現有保障，每年檢視一次即可")
+    for rec in recommendations:
+        st.info(f"📌 {rec}")
     
     col1, col2 = st.columns(2)
     with col1:
@@ -310,81 +274,59 @@ elif st.session_state.step == 4:
     st.header("📄 第四步：報告總結")
     data = st.session_state.client_data
     
-    # 重新計算一次（確保數據最新）
+    # 重新計算（與第三步相同）
     market_inpatient = 1200
     market_surgery = 40000
-    market_cancer_yearly = 720000
+    market_cancer = 720000
     market_critical = 800000
-    market_accident_medical = 50000
-    market_accident_death = 1000000
+    market_acc_med = 50000
+    market_acc_death = 1000000
     
-    inpatient_gap = max(0, market_inpatient - data["inpatient_amount"]) if data["has_medical"] == "有" else market_inpatient
-    surgery_gap = max(0, market_surgery - data["surgery_amount"]) if data["has_medical"] == "有" else market_surgery
-    cancer_gap = max(0, market_cancer_yearly - data["cancer_amount"]) if data["has_medical"] == "有" else market_cancer_yearly
-    critical_gap = max(0, market_critical - data["critical_amount"]) if data["has_critical"] == "有" else market_critical
-    accident_medical_gap = max(0, market_accident_medical - data["accident_medical"]) if data["has_accident"] == "有" else market_accident_medical
-    accident_death_gap = max(0, market_accident_death - data["accident_death"]) if data["has_accident"] == "有" else market_accident_death
+    inpatient_gap = max(0, market_inpatient - data["inpatient_amount"])
+    surgery_gap = max(0, market_surgery - data["surgery_amount"])
+    cancer_gap = max(0, market_cancer - data["cancer_amount"])
+    critical_gap = max(0, market_critical - data["critical_amount"])
+    acc_med_gap = max(0, market_acc_med - data["accident_medical"])
+    acc_death_gap = max(0, market_acc_death - data["accident_death"])
     
     st.markdown("### 保險快速檢視報告")
     st.markdown(f"**客人姓名**：{data['name']}")
     st.markdown(f"**檢視日期**：{data['date']}")
     st.markdown("---")
     
-    # 醫療部分
     st.markdown("#### 一、醫療保障對比")
-    if data["has_medical"] == "冇":
-        st.warning("現狀：無任何醫療保險")
-        st.markdown(f"- 住院缺口：HK$ {market_inpatient:,}/晚")
-        st.markdown(f"- 手術缺口：HK$ {market_surgery:,}/次")
-        st.markdown(f"- 癌症治療缺口：HK$ {market_cancer_yearly:,}/年")
-    else:
-        st.markdown(f"- **住院**：現有 HK$ {data['inpatient_amount']:,}/晚，市場參考 HK$ {market_inpatient:,}，**差額 HK$ {inpatient_gap:,}/晚**")
-        st.markdown(f"- **手術**：現有 HK$ {data['surgery_amount']:,}/次，市場參考 HK$ {market_surgery:,}，**差額 HK$ {surgery_gap:,}/次**")
-        st.markdown(f"- **癌症治療**：現有 HK$ {data['cancer_amount']:,}/年，市場參考 HK$ {market_cancer_yearly:,}，**差額 HK$ {cancer_gap:,}/年**")
+    st.markdown(f"- **住院**：現有 HK$ {data['inpatient_amount']:,}/晚，市場參考 HK$ {market_inpatient:,}，**差額 HK$ {inpatient_gap:,}/晚**")
+    st.markdown(f"- **手術**：現有 HK$ {data['surgery_amount']:,}/次，市場參考 HK$ {market_surgery:,}，**差額 HK$ {surgery_gap:,}/次**")
+    st.markdown(f"- **癌症治療**：現有 HK$ {data['cancer_amount']:,}/年，市場參考 HK$ {market_cancer:,}，**差額 HK$ {cancer_gap:,}/年**")
     
-    # 危疾部分
     st.markdown("#### 二、危疾保障對比")
-    if data["has_critical"] == "冇":
-        st.warning("現狀：無危疾保險")
-        st.markdown(f"- 一筆過賠償缺口：HK$ {market_critical:,}")
-    else:
-        st.markdown(f"- 現有賠償：HK$ {data['critical_amount']:,}，市場參考治療費 HK$ {market_critical:,}，**差額 HK$ {critical_gap:,}**")
+    st.markdown(f"- 現有賠償：HK$ {data['critical_amount']:,}，市場參考治療費 HK$ {market_critical:,}，**差額 HK$ {critical_gap:,}**")
     
-    # 意外部分
     st.markdown("#### 三、意外保障對比")
-    if data["has_accident"] == "冇":
-        st.warning("現狀：無意外保險")
-        st.markdown(f"- 意外醫療缺口：HK$ {market_accident_medical:,}/年")
-        st.markdown(f"- 意外身故/傷殘缺口：HK$ {market_accident_death:,}")
-    else:
-        st.markdown(f"- **意外醫療**：現有 HK$ {data['accident_medical']:,}/年，市場參考 HK$ {market_accident_medical:,}，**差額 HK$ {accident_medical_gap:,}/年**")
-        st.markdown(f"- **意外身故/傷殘**：現有 HK$ {data['accident_death']:,}，市場參考 HK$ {market_accident_death:,}，**差額 HK$ {accident_death_gap:,}**")
+    st.markdown(f"- **意外醫療**：現有 HK$ {data['accident_medical']:,}/年，市場參考 HK$ {market_acc_med:,}，**差額 HK$ {acc_med_gap:,}/年**")
+    st.markdown(f"- **意外身故/傷殘**：現有 HK$ {data['accident_death']:,}，市場參考 HK$ {market_acc_death:,}，**差額 HK$ {acc_death_gap:,}**")
     
     st.markdown("---")
     st.markdown("*無壓力・唔使買・純粹幫你睇*")
     st.caption("顧問：Sonia")
     
-    # 下載報告（純文字版，包含差額）
+    # 下載報告
     report_text = f"""
 保險快速檢視報告
 客人：{data['name']}
 日期：{data['date']}
 
 一、醫療保障
-{'- 無醫療保險' if data['has_medical'] == '冇' else f'''
-- 住院賠償：HK$ {data['inpatient_amount']:,}/晚 (市場參考 HK$ {market_inpatient:,}) 差額 HK$ {inpatient_gap:,}
-- 手術賠償：HK$ {data['surgery_amount']:,}/次 (市場參考 HK$ {market_surgery:,}) 差額 HK$ {surgery_gap:,}
-- 癌症治療賠償：HK$ {data['cancer_amount']:,}/年 (市場參考 HK$ {market_cancer_yearly:,}) 差額 HK$ {cancer_gap:,}
-'''}
+- 住院：現有 HK$ {data['inpatient_amount']:,}/晚，市場 HK$ {market_inpatient:,}，差額 HK$ {inpatient_gap:,}
+- 手術：現有 HK$ {data['surgery_amount']:,}/次，市場 HK$ {market_surgery:,}，差額 HK$ {surgery_gap:,}
+- 癌症治療：現有 HK$ {data['cancer_amount']:,}/年，市場 HK$ {market_cancer:,}，差額 HK$ {cancer_gap:,}
 
 二、危疾保障
-{'- 無危疾保險' if data['has_critical'] == '冇' else f'- 危疾賠償：HK$ {data['critical_amount']:,} (市場參考治療費 HK$ {market_critical:,}) 差額 HK$ {critical_gap:,}'}
+- 現有 HK$ {data['critical_amount']:,}，市場參考 HK$ {market_critical:,}，差額 HK$ {critical_gap:,}
 
 三、意外保障
-{'- 無意外保險' if data['has_accident'] == '冇' else f'''
-- 意外醫療賠償：HK$ {data['accident_medical']:,}/年 (市場參考 HK$ {market_accident_medical:,}) 差額 HK$ {accident_medical_gap:,}
-- 意外身故賠償：HK$ {data['accident_death']:,} (市場參考 HK$ {market_accident_death:,}) 差額 HK$ {accident_death_gap:,}
-'''}
+- 意外醫療：現有 HK$ {data['accident_medical']:,}/年，市場 HK$ {market_acc_med:,}，差額 HK$ {acc_med_gap:,}
+- 意外身故：現有 HK$ {data['accident_death']:,}，市場 HK$ {market_acc_death:,}，差額 HK$ {acc_death_gap:,}
 
 ---
 無壓力・唔使買・純粹幫你睇

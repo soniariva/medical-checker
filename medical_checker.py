@@ -198,7 +198,7 @@ elif st.session_state.step == 4:
     
     st.markdown("---")
     st.markdown("*無壓力・唔使買・純粹幫你睇*")
-    st.caption(f"顧問：淇錡")
+    st.caption(f"顧問：Sonia")
     
     # 下載報告功能
     report_text = f"""

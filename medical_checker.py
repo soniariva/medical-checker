@@ -375,7 +375,12 @@ elif st.session_state.step == 4:
     )
 
     # 假設你已經有下載按鈕
-st.download_button(...)
+st.download_button(
+    label="下載檔案",
+    data=your_data,
+    file_name="example.csv",
+    mime="text/csv"
+)
 
 # 新加入嘅提交按鈕
 if st.button("📤 提交並儲存記錄"):

@@ -1,6 +1,40 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+import requests
+import json
+
+def save_to_google_sheets(data):
+    url = "https://script.google.com/macros/s/AKfycbxuoIJBs_MHy7XekB8RiOCtyiyiZghm22wS-8HRBv2IfZ9-dti9-1kMlo3PA0kNG4Ti/exec"
+    payload = {
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "name": data.get("name", ""),
+        "phone": data.get("phone", ""),
+        "risk": data.get("risk", ""),
+        "budget": data.get("budget", 0),
+        "has_medical": data.get("has_medical", ""),
+        "company": data.get("company", ""),
+        "inpatient_amount": data.get("inpatient_amount", 0),
+        "surgery_amount": data.get("surgery_amount", 0),
+        "cancer_amount": data.get("cancer_amount", 0),
+        "critical_amount": data.get("critical_amount", 0),
+        "accident_medical": data.get("accident_medical", 0),
+        "accident_death": data.get("accident_death", 0),
+        "education_fund": data.get("edu_fund", 0),
+        "life_insurance": data.get("life", 0),
+        "monthly_expense": data.get("monthly_expense", 0),
+        "mortgage": data.get("mortgage", 0),
+        "total_income": data.get("total_income", 0)
+    }
+    try:
+        response = requests.post(url, json=payload)
+        if response.status_code == 200:
+            st.success("✅ 报告已保存，Sonia 会跟进！")
+        else:
+            st.warning("⚠️ 保存失败，但你可以手动截图报告给我。")
+    except:
+        st.warning("⚠️ 网络问题，请稍后再试。")
+
 
 # 頁面設定
 st.set_page_config(page_title="15分鐘保險檢視", page_icon="🩺", layout="wide")
@@ -339,7 +373,34 @@ elif st.session_state.step == 4:
         file_name=f"保險報告_{data['name']}.txt",
         mime="text/plain"
     )
-    
+
+    # 假設你已經有下載按鈕
+st.download_button(...)
+
+# 新加入嘅提交按鈕
+if st.button("📤 提交並儲存記錄"):
+    # 收集所有數據
+    all_data = {
+        "name": st.session_state.client_data.get("name"),
+        "phone": st.session_state.client_data.get("phone"),
+        "risk": st.session_state.client_data.get("risk"),
+        "budget": st.session_state.client_data.get("budget"),
+        "has_medical": st.session_state.client_data.get("has_medical"),
+        "company": st.session_state.client_data.get("company"),
+        "inpatient_amount": st.session_state.client_data.get("inpatient_amount"),
+        "surgery_amount": st.session_state.client_data.get("surgery_amount"),
+        "cancer_amount": st.session_state.client_data.get("cancer_amount"),
+        "critical_amount": st.session_state.client_data.get("critical_amount"),
+        "accident_medical": st.session_state.client_data.get("accident_medical"),
+        "accident_death": st.session_state.client_data.get("accident_death"),
+        "edu_fund": st.session_state.client_data.get("edu_fund"),
+        "life": st.session_state.client_data.get("life"),
+        "monthly_expense": st.session_state.client_data.get("monthly_expense"),
+        "mortgage": st.session_state.client_data.get("mortgage"),
+        "total_income": st.session_state.client_data.get("annual_income", 0) + st.session_state.client_data.get("spouse_income", 0)
+    }
+    save_to_google_sheets(all_data)
+
     if st.button("← 開始新檢視"):
         st.session_state.step = 1
         st.session_state.client_data = {}

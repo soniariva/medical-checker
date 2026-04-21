@@ -378,8 +378,8 @@ elif st.session_state.step == 4:
 st.download_button(
     label="下載檔案",
     data=your_data,
-    file_name="example.csv",
-    mime="text/csv"
+    file_name="example.txt",
+    mime="text/plain"
 )
 
 # 新加入嘅提交按鈕
